@@ -15,6 +15,7 @@
 use std::marker::PhantomData;
 use std::time::Duration;
 
+use x11_clipboard::error::Error;
 use x11_clipboard::Atom;
 use x11_clipboard::{Atoms, Clipboard as X11Clipboard};
 
@@ -67,6 +68,16 @@ where
     }
 
     fn set_contents(&mut self, data: String) -> Result<()> {
-        Ok(self.0.store(S::atom(&self.0.setter.atoms), self.0.setter.atoms.utf8_string, data)?)
+        self.0.store(S::atom(&self.0.setter.atoms), self.0.setter.atoms.utf8_string, data).or_else(
+            |err| match err {
+                // The `Owner` error can be spurious, caused by a racy
+                // ownership check. The "store" will still have
+                // happened, so it is safe to ignore.
+                // https://github.com/quininer/x11-clipboard/pull/53 has
+                // more details.
+                Error::Owner => Ok(()),
+                e => Err(e.into()),
+            },
+        )
     }
 }
